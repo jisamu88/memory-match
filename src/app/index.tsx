@@ -43,16 +43,27 @@ export default function MemoryMatchScreen() {
   const [cards, setCards] = useState<Card[]>([]);
   const [picked, setPicked] = useState<number[]>([]);
   const [moves, setMoves] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+  const [started, setStarted] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Shuffle after the screen loads (avoids the web hydration error)
   useEffect(() => {
-    setCards(buildDeck());
-  }, []);
+  setCards(buildDeck());
+  setMounted(true);
+}, []);
 
   const locked = picked.length === 2;
   const won = cards.length > 0 && cards.every((c) => c.matched);
 
-  const boardWidth = Math.min(width - 32, 420);
+  // Timer: starts on the first tap, stops when the game is won
+  useEffect(() => {
+    if (!started || won) return;
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [started, won]);
+
+  const boardWidth = Math.min((mounted ? width : 360) - 32, 420);
   const cardSize = (boardWidth - GAP * (COLUMNS - 1)) / COLUMNS;
 
   function handlePress(index: number) {
@@ -60,6 +71,7 @@ export default function MemoryMatchScreen() {
     const card = cards[index];
     if (!card || card.flipped || card.matched) return;
 
+    setStarted(true);
     setCards((prev) =>
       prev.map((c, i) => (i === index ? { ...c, flipped: true } : c))
     );
@@ -95,12 +107,16 @@ export default function MemoryMatchScreen() {
     setCards(buildDeck());
     setPicked([]);
     setMoves(0);
+    setSeconds(0);
+    setStarted(false);
   }
 
   return (
     <SafeAreaView style={styles.screen}>
       <Text style={styles.title}>Memory Match</Text>
-      <Text style={styles.moves}>Moves: {moves}</Text>
+      <Text style={styles.moves}>
+        Moves: {moves}  |  Time: {seconds}s
+      </Text>
 
       <View style={[styles.board, { width: boardWidth }]}>
         {cards.map((card, index) => {
@@ -126,7 +142,9 @@ export default function MemoryMatchScreen() {
 
       {won && (
         <View style={styles.winBox}>
-          <Text style={styles.winText}>You won in {moves} moves!</Text>
+          <Text style={styles.winText}>
+            You won in {moves} moves and {seconds}s!
+          </Text>
         </View>
       )}
 
