@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -49,6 +51,63 @@ function buildDeck(pairs: number): Card[] {
     flipped: false,
     matched: false,
   }));
+}
+
+// One card that turns over with a smooth animation
+function FlipCard({
+  emoji,
+  faceUp,
+  matched,
+  size,
+  onPress,
+}: {
+  emoji: string;
+  faceUp: boolean;
+  matched: boolean;
+  size: number;
+  onPress: () => void;
+}) {
+  const flip = useRef(new Animated.Value(faceUp ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(flip, {
+      toValue: faceUp ? 1 : 0,
+      duration: 250,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [faceUp]);
+
+  const backRotate = flip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const frontRotate = flip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+
+  return (
+    <Pressable onPress={onPress} style={{ width: size, height: size }}>
+      {/* Face-down side (amber) */}
+      <Animated.View
+        style={[
+          styles.face,
+          styles.cardFaceDown,
+          { transform: [{ perspective: 800 }, { rotateY: backRotate }] },
+        ]}
+      />
+      {/* Face-up side (emoji) */}
+      <Animated.View
+        style={[
+          styles.face,
+          matched ? styles.cardMatched : styles.cardFaceUp,
+          { transform: [{ perspective: 800 }, { rotateY: frontRotate }] },
+        ]}
+      >
+        <Text style={[styles.emoji, { fontSize: size * 0.5 }]}>{emoji}</Text>
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 export default function MemoryMatchScreen() {
@@ -124,7 +183,7 @@ export default function MemoryMatchScreen() {
     return () => clearTimeout(timer);
   }, [picked]);
 
-  const { columns, pairs } = LEVELS[level];
+  const { columns } = LEVELS[level];
   const availableWidth = Math.min((mounted ? width : 360) - 32, 420);
   const cardSize = Math.min(
     90,
@@ -195,25 +254,16 @@ export default function MemoryMatchScreen() {
         </Text>
 
         <View style={[styles.board, { width: boardWidth }]}>
-          {cards.map((card, index) => {
-            const faceUp = card.flipped || card.matched;
-            return (
-              <Pressable
-                key={card.id}
-                onPress={() => handlePress(index)}
-                style={[
-                  styles.card,
-                  { width: cardSize, height: cardSize },
-                  faceUp ? styles.cardFaceUp : styles.cardFaceDown,
-                  card.matched && styles.cardMatched,
-                ]}
-              >
-                <Text style={[styles.emoji, { fontSize: cardSize * 0.5 }]}>
-                  {faceUp ? card.emoji : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {cards.map((card, index) => (
+            <FlipCard
+              key={card.id}
+              emoji={card.emoji}
+              faceUp={card.flipped || card.matched}
+              matched={card.matched}
+              size={cardSize}
+              onPress={() => handlePress(index)}
+            />
+          ))}
         </View>
 
         {won && (
@@ -285,10 +335,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: GAP,
   },
-  card: {
+  face: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backfaceVisibility: 'hidden',
   },
   cardFaceDown: {
     backgroundColor: '#FCA311',
